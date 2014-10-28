@@ -2,7 +2,7 @@ server: zabbix
 port: 10051
 sender_path: /usr/local/bin/zabbix_sender
 item: Puppet.Run
-regex:
+hostlist:
    example-l01-.*:
       taglist:
          - apache2

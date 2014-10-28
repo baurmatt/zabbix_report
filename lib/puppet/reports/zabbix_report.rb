@@ -25,7 +25,7 @@ Puppet::Reports.register_report(:zabbix_report) do
 
 			send = false
 
-			configuration['regex'].each do |key, value|
+			configuration['hostlist'].each do |key, value|
 				if m = self.host.match(key)
 					if value['taglist'].include?('all')
 						send = true
