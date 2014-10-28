@@ -1,0 +1,12 @@
+server: zabbix
+port: 10051
+sender_path: /usr/local/bin/zabbix_sender
+item: Puppet.Run
+regex:
+   example-l01-.*:
+      taglist:
+         - apache2
+      server: zabbixtest
+      port: 1337
+      sender_path: /path/to/sender
+      item: Magic.Zabbix.Item

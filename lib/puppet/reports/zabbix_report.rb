@@ -2,69 +2,53 @@
 # vim: tabstop=2 noexpandtab
 
 require 'puppet'
+require 'yaml'
+
 # require any other Ruby libraries necessary for this specific report
 
 Puppet::Reports.register_report(:zabbix_report) do
 	desc "Process reports via the Zabbix API."
 
 	def process
-      configurationfile = "/etc/puppet/zabbix_report.conf"
-      unless Puppet::FileSystem.exist?(configurationfile)
+      configurationfile = "/etc/puppet/zabbix_report.yaml"
+      if Puppet::FileSystem.exist?(configurationfile)
+				configuration = YAML.load_file('/etc/puppet/zabbix_report.yaml')
+			else
         Puppet.notice "Cannot send zabbix report; no configuration file found at /etc/puppet/zabbix_report.conf"
         return
       end
 
-      configuration = ZabbixReportConfiguration.new(File.read(configurationfile))
-      zabbix_command = "#{configuration.sender_path} --zabbix-server #{configuration.server}"\
-                       " --port #{configuration.port} --host #{configuration.host} --key #{configuration.item}"
+			default_sender_path = configuration['sender_path']
+			default_server      = configuration['server']
+			default_port        = configuration['port']
+			default_item        = configuration['item']
 
-      if configuration.type == "status"
-         zabbix_command = "#{zabbix_command} --value #{self.status}"
-      elsif configuration.type == "log"
-         file = File.new("/tmp/zabbix_report_test" + rand(999999999).to_s, "w")
-         file.puts(self.logs)
-         file.close
-      else
-         Puppet.fail "Unknow configuration parameter value for type found: #{type}"
-      end
-   end
-end
+			send = false
 
-class ZabbixReportConfiguration
-   attr_accessor :type, :server, :port, :sender_path, :item, :host
+			configuration['regex'].each do |key, value|
+				if m = self.host.match(key)
+					if value['taglist'].include?('all')
+						send = true
+					else
+						messages = nil
+						messages = self.logs.find_all do |log|
+							value['taglist'].detect { |tag| log.tagged?(tag) }
 
-   def initialize(text = nil)
-      self.type = "status"
-      self.server = "127.0.0.1"
-      self.port = "10051"
-      self.sender_path = "/usr/local/bin/zabbix_sender"
-      self.item = "Puppet.Run"
-      if text
-         self.parse(text)
-      end
-   end
-
-   def parse(text)
-      text.split("\n").each do |line|
-         case line.chomp
-         when /^\s*#/; next
-         when /^\s*$/; next
-         when /^\s*(.+)\s*=\s*(.+)\s*$/
-            case $1
-            when "type"
-               self.type = $2
-            when "server"
-               self.server = $2
-            when "port"
-               self.port = $2
-            when "sender_path"
-               self.sender_path = $2
-            when "item"
-               self.item = $2
-            else
-               raise ArgumentError, "Found invalid configuration parameter #{2} in zabbix_report configuration file"
-            end
-         end
-      end
-   end
+						if messages.nil? || messages.empty?
+							send = true
+						end
+					end
+				end
+				if send
+					sender_path = value['sender_path'] ? value['sender_path'] : default_sender_path
+					server      = value['server'] ? value['server'] : default_server
+					port        = value['port'] ? value['port'] : default_port
+					item        = value['item'] ? value['item'] : default_item
+				 	zabbix_command = "#{sender_path} --zabbix-server #{server}"\
+				                   " --port #{port} --host #{self.host} --key #{item} --value #{self.status}"
+					system(zabbix_command)
+				end
+			end
+		end
+	end
 end
